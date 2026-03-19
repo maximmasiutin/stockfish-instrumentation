@@ -34,26 +34,35 @@ make -j profile-build ARCH=x86-64-avx512icl COMP=mingw
 
 ### Applying Instrumentation to Other Branches
 
-To instrument a different branch (e.g., a fork or feature branch):
+A pre-generated patch file is included in this repository: `instrument-shared-deltas.patch`.
+It covers `src/search.cpp` and `src/uci.cpp`.
 
 ```bash
-# Generate patch from master
-git diff master..instrument-shared-deltas -- src/search.cpp > /tmp/instrument-search.patch
-git diff master..instrument-shared-deltas -- src/uci.cpp > /tmp/instrument-uci.patch
-
-# Apply to target branch
+# Apply to a target branch in any Stockfish fork
 cd /path/to/target-repo
 git checkout target-branch
-git apply /tmp/instrument-search.patch
-git apply /tmp/instrument-uci.patch
+git apply /path/to/instrument-shared-deltas.patch
 
-# Build with PGO (recommended)
+# Build with PGO (profile-build recommended for accurate results)
 cd src
-make -j profile-build ARCH=x86-64-avx512icl COMP=gcc
+make -j profile-build ARCH=x86-64-avx512icl COMP=mingw   # Windows/MSYS2
+# or
+make -j profile-build ARCH=x86-64-avx512icl COMP=gcc  # Linux
 ```
+
+If the patch does not apply cleanly (due to upstream changes in the target branch),
+apply it with `--reject` to get partial hunks, then apply the remaining changes
+manually by following the descriptions in "How It Works" below.
 
 Use standard `profile-build` (not a clean-profile + instrumented-rebuild approach,
 which causes 5x slowdown due to PGO profile mismatch).
+
+To regenerate the patch from the source branch:
+
+```bash
+cd /path/to/maximmasiutin-Stockfish
+git diff master..instrument-shared-deltas -- src/search.cpp src/uci.cpp > instrument-shared-deltas.patch
+```
 
 ## Running the Sweep
 
