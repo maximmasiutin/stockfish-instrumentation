@@ -12,7 +12,7 @@ Usage:
 Outputs:
   Console/txt (-o): zero-delta summary table per depth
   CSV (--csv): full delta distribution for every table at every depth
-    Columns: depth,table,total_writes,d0,d1,d2,d3,d4_5,d6_9,d10_19,d20_49,d50_99,d100_199,d200p
+    Columns: depth,table,total_writes,elapsed_s,d0,d1,d2,...,d200p
 """
 
 import argparse
@@ -92,21 +92,38 @@ def run_depth(  # pylint: disable=too-many-locals
     cmd = [exe, "bench", "256", str(threads), str(depth)]
     env = os.environ.copy()
     env["BENCH_DEPTH"] = str(depth)
-    result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, timeout=7200, env=env, check=False)
-    if result.returncode != 0:
-        print(f" bench failed (exit {result.returncode}): "
-              f"{result.stderr.strip()}", file=sys.stderr)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True, env=env)
+
+    lines: list[str] = []
+    bestmove_count = 0
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            lines.append(line)
+            if line.startswith("bestmove"):
+                bestmove_count += 1
+                print(f"--- depth {depth} ... pos {bestmove_count}/51",
+                      flush=True)
+        proc.wait(timeout=7200)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        print("TIMEOUT after 7200s", file=sys.stderr, flush=True)
         return {}, 0, []
-    output = result.stdout
+
+    if proc.returncode != 0:
+        print(f"bench failed (exit {proc.returncode})", file=sys.stderr, flush=True)
+        return {}, 0, []
 
     d0: D0Dict = {}
     total_writes = 0
     raw_rows: list[RawRow] = []
     found_csv = False
 
-    for line in output.splitlines():
+    for line in lines:
         parsed = _parse_csv_line(line.split(","), depth)
         if parsed is not None:
             tbl, tw, bins, row = parsed
@@ -128,11 +145,12 @@ def run_depth(  # pylint: disable=too-many-locals
     return d0, total_writes, raw_rows
 
 
-def fmt_row(depth: int, vals: list[float], mean: float, total_writes: int) -> str:
+def fmt_row(depth: int, vals: list[float], mean: float, total_writes: int,
+            elapsed: float) -> str:
     """Format a summary table row."""
     return (f"{depth:>5} | {vals[0]:>9.1f}% | {vals[1]:>10.1f}% | {vals[2]:>9.1f}% | "
             f"{vals[3]:>9.1f}% | {vals[4]:>10.1f}% | {vals[5]:>10.1f}% | {mean:>5.1f}% | "
-            f"{total_writes:>14,}")
+            f"{total_writes:>14,} | {elapsed:>8.1f}s")
 
 
 def main() -> None:  # pylint: disable=too-many-locals
@@ -157,7 +175,7 @@ def main() -> None:  # pylint: disable=too-many-locals
 
     header = (f"{'Depth':>5} | {'pawnCorr':>10} | {'minorCorr':>11} | {'nonpawnW':>10} | "
               f"{'nonpawnB':>10} | {'contCorr2':>11} | {'contCorr4':>11} | {'Mean':>6} | "
-              f"{'TotalWrites':>14}")
+              f"{'TotalWrites':>14} | {'Time':>9}")
     sep = "-" * len(header)
 
     outf = (open(args.output, "w", newline="\n",  # noqa: SIM115  # pylint: disable=consider-using-with
@@ -167,13 +185,13 @@ def main() -> None:  # pylint: disable=too-many-locals
     if args.csv:
         csvf = open(args.csv, "w", newline="",  # noqa: SIM115  # pylint: disable=consider-using-with
                     encoding="utf-8")
-        fieldnames = ["depth", "table", "total_writes"] + BIN_NAMES
+        fieldnames = ["depth", "table", "total_writes", "elapsed_s"] + BIN_NAMES
         csvw = csv.DictWriter(csvf, fieldnames=fieldnames)
         csvw.writeheader()
         csvf.flush()
 
     def emit(line: str) -> None:
-        print(line)
+        print(line, flush=True)
         if outf:
             outf.write(line + "\n")
             outf.flush()
@@ -184,22 +202,22 @@ def main() -> None:  # pylint: disable=too-many-locals
 
         for depth in range(args.from_depth, args.to + 1):
             t0 = time.time()
-            print(f"--- depth {depth} ...", end="", flush=True)
             d0, total_writes, raw_rows = run_depth(args.exe, depth, args.threads)
             elapsed = time.time() - t0
-            print(f" done in {elapsed:.1f}s")
+            print(f"\n--- depth {depth} ... done in {elapsed:.1f}s", flush=True)
 
             if not d0:
                 row = f"{depth:>5} | {'(no data)':^80}"
             else:
                 vals = [d0.get(t, 0.0) for t in TABLES]
                 mean = sum(vals) / len(vals)
-                row = fmt_row(depth, vals, mean, total_writes)
+                row = fmt_row(depth, vals, mean, total_writes, elapsed)
 
             emit(row)
 
             if csvw and csvf and raw_rows:
                 for r in raw_rows:
+                    r["elapsed_s"] = round(elapsed, 1)
                     csvw.writerow(r)
                 csvf.flush()
     finally:
@@ -209,9 +227,9 @@ def main() -> None:  # pylint: disable=too-many-locals
             csvf.close()
 
     if args.output:
-        print(f"\nSaved summary to {args.output}")
+        print(f"\nSaved summary to {args.output}", flush=True)
     if args.csv:
-        print(f"Saved raw CSV to {args.csv}")
+        print(f"Saved raw CSV to {args.csv}", flush=True)
 
 
 if __name__ == "__main__":
