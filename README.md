@@ -90,21 +90,23 @@ python run_delta_sweep.py --exe ./stockfish --from 1 --to 10 -t 4
 Summary table (stdout and -o file):
 
 ```text
-Depth |   pawnCorr |   minorCorr |   nonpawnW |   nonpawnB |   contCorr2 |   contCorr4 |   Mean |    TotalWrites
-----------------------------------------------------------------------------------------------------------------
-    1 |       2.4% |        2.4% |       2.4% |       2.4% |       57.4% |       63.5% |  21.7% |          5,352
-    2 |       3.8% |        7.7% |       4.1% |       6.1% |       37.7% |       42.6% |  17.0% |         16,518
+Depth |   pawnCorr |   minorCorr |   nonpawnW |   nonpawnB |   contCorr2 |   contCorr4 |   Mean |    TotalWrites |      Time
+-----------------------------------------------------------------------------------------------------------------------------
+    1 |       2.4% |        2.4% |       2.4% |       2.4% |       57.4% |       63.5% |  21.7% |          5,352 |      1.6s
+    2 |       3.8% |        7.7% |       4.1% |       6.1% |       37.7% |       42.6% |  17.0% |         16,518 |      1.7s
 ```
 
 Raw CSV (--csv file):
 
 ```csv
-depth,table,total_writes,d0,d1,d2,d3,d4_5,d6_9,d10_19,d20_49,d50_99,d100_199,d200p
-1,pawnCorr,892,2.4664,7.2869,...
+depth,table,total_writes,elapsed_s,d0,d1,d2,d3,d4_5,d6_9,d10_19,d20_49,d50_99,d100_199,d200p
+1,pawnCorr,892,1.6,2.4664,7.2869,...
 ```
 
 The "d0" column shows the percentage of writes that produce zero value change.
 TotalWrites is the sum across all 6 correction tables.
+Time/elapsed_s is the wall-clock time in seconds for the bench run at that depth.
+Time roughly doubles every 2-3 depths; depths 22+ can take minutes to hours each.
 
 ### Delta Bins
 
