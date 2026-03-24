@@ -21,13 +21,23 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from typing import Any
 
 TABLES = ["pawnCorr", "minorCorr", "nonpawnW", "nonpawnB", "contCorr2", "contCorr4"]
 BIN_NAMES = [
-    "d0", "d1", "d2", "d3", "d4_5", "d6_9",
-    "d10_19", "d20_49", "d50_99", "d100_199", "d200p",
+    "d0",
+    "d1",
+    "d2",
+    "d3",
+    "d4_5",
+    "d6_9",
+    "d10_19",
+    "d20_49",
+    "d50_99",
+    "d100_199",
+    "d200p",
 ]
 DEFAULT_EXE = "stockfish.exe" if sys.platform == "win32" else "./stockfish"
 
@@ -55,9 +65,7 @@ def _parse_csv_line(
         return None
 
 
-def _parse_pretty_line(
-    line: str, depth: int
-) -> tuple[str, int, float, RawRow] | None:
+def _parse_pretty_line(line: str, depth: int) -> tuple[str, int, float, RawRow] | None:
     """Parse a pretty-print output line. Returns (table, writes, d0, row) or None."""
     stripped = line.strip()
     for tbl in TABLES:
@@ -92,9 +100,19 @@ def run_depth(  # pylint: disable=too-many-locals
     cmd = [exe, "bench", "256", str(threads), str(depth)]
     env = os.environ.copy()
     env["BENCH_DEPTH"] = str(depth)
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        text=True, env=env)
+    proc = subprocess.Popen(  # pylint: disable=consider-using-with
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env
+    )
+
+    timed_out = threading.Event()
+
+    def _kill_on_timeout() -> None:
+        timed_out.set()
+        if proc.poll() is None:
+            proc.kill()
+
+    timer = threading.Timer(7200, _kill_on_timeout)
+    timer.start()
 
     lines: list[str] = []
     bestmove_count = 0
@@ -105,12 +123,15 @@ def run_depth(  # pylint: disable=too-many-locals
             lines.append(line)
             if line.startswith("bestmove"):
                 bestmove_count += 1
-                print(f"--- depth {depth} ... pos {bestmove_count}/51",
-                      flush=True)
-        proc.wait(timeout=7200)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+                print(f"--- depth {depth} ... pos {bestmove_count}/51", flush=True)
         proc.wait()
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+
+    if timed_out.is_set():
         print("TIMEOUT after 7200s", file=sys.stderr, flush=True)
         return {}, 0, []
 
@@ -145,12 +166,15 @@ def run_depth(  # pylint: disable=too-many-locals
     return d0, total_writes, raw_rows
 
 
-def fmt_row(depth: int, vals: list[float], mean: float, total_writes: int,
-            elapsed: float) -> str:
+def fmt_row(
+    depth: int, vals: list[float], mean: float, total_writes: int, elapsed: float
+) -> str:
     """Format a summary table row."""
-    return (f"{depth:>5} | {vals[0]:>9.1f}% | {vals[1]:>10.1f}% | {vals[2]:>9.1f}% | "
-            f"{vals[3]:>9.1f}% | {vals[4]:>10.1f}% | {vals[5]:>10.1f}% | {mean:>5.1f}% | "
-            f"{total_writes:>14,} | {elapsed:>8.1f}s")
+    return (
+        f"{depth:>5} | {vals[0]:>9.1f}% | {vals[1]:>10.1f}% | {vals[2]:>9.1f}% | "
+        f"{vals[3]:>9.1f}% | {vals[4]:>10.1f}% | {vals[5]:>10.1f}% | {mean:>5.1f}% | "
+        f"{total_writes:>14,} | {elapsed:>8.1f}s"
+    )
 
 
 def main() -> None:  # pylint: disable=too-many-locals
@@ -158,33 +182,65 @@ def main() -> None:  # pylint: disable=too-many-locals
     parser = argparse.ArgumentParser(
         description="Sweep delta distributions by depth",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__)
-    parser.add_argument("--exe", default=DEFAULT_EXE,
-                        help=f"Path to stockfish executable (default: {DEFAULT_EXE})")
-    parser.add_argument("--from", dest="from_depth", type=int, default=1,
-                        help="Starting depth (default: 1)")
-    parser.add_argument("--to", type=int, default=8,
-                        help="Maximum depth (default: 8)")
-    parser.add_argument("-t", "--threads", type=int, default=8,
-                        help="Thread count (default: 8)")
-    parser.add_argument("-o", "--output", type=str, default=None,
-                        help="Save summary table to .txt file (flushed per depth)")
-    parser.add_argument("--csv", type=str, default=None,
-                        help="Save full raw delta distribution to CSV file")
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        "--exe",
+        default=DEFAULT_EXE,
+        help=f"Path to stockfish executable (default: {DEFAULT_EXE})",
+    )
+    parser.add_argument(
+        "--from",
+        dest="from_depth",
+        type=int,
+        default=1,
+        help="Starting depth (default: 1)",
+    )
+    parser.add_argument("--to", type=int, default=8, help="Maximum depth (default: 8)")
+    parser.add_argument(
+        "-t", "--threads", type=int, default=8, help="Thread count (default: 8)"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=None,
+        help="Save summary table to .txt file (flushed per depth)",
+    )
+    parser.add_argument(
+        "--csv",
+        type=str,
+        default=None,
+        help="Save full raw delta distribution to CSV file",
+    )
     args = parser.parse_args()
 
-    header = (f"{'Depth':>5} | {'pawnCorr':>10} | {'minorCorr':>11} | {'nonpawnW':>10} | "
-              f"{'nonpawnB':>10} | {'contCorr2':>11} | {'contCorr4':>11} | {'Mean':>6} | "
-              f"{'TotalWrites':>14} | {'Time':>9}")
+    header = (
+        f"{'Depth':>5} | {'pawnCorr':>10} | {'minorCorr':>11} | {'nonpawnW':>10} | "
+        f"{'nonpawnB':>10} | {'contCorr2':>11} | {'contCorr4':>11} | {'Mean':>6} | "
+        f"{'TotalWrites':>14} | {'Time':>9}"
+    )
     sep = "-" * len(header)
 
-    outf = (open(args.output, "w", newline="\n",  # noqa: SIM115  # pylint: disable=consider-using-with
-                 encoding="utf-8") if args.output else None)
+    outf = (
+        open(  # noqa: SIM115  # pylint: disable=consider-using-with
+            args.output,
+            "w",
+            newline="\n",
+            encoding="utf-8",
+        )
+        if args.output
+        else None
+    )
     csvf = None
     csvw: csv.DictWriter[str] | None = None
     if args.csv:
-        csvf = open(args.csv, "w", newline="",  # noqa: SIM115  # pylint: disable=consider-using-with
-                    encoding="utf-8")
+        csvf = open(  # noqa: SIM115  # pylint: disable=consider-using-with
+            args.csv,
+            "w",
+            newline="",
+            encoding="utf-8",
+        )
         fieldnames = ["depth", "table", "total_writes", "elapsed_s"] + BIN_NAMES
         csvw = csv.DictWriter(csvf, fieldnames=fieldnames)
         csvw.writeheader()
