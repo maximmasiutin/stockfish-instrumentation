@@ -1,8 +1,8 @@
 diff --git a/src/search.cpp b/src/search.cpp
-index 2def21d0..63e54ff3 100644
+index 2def21d0..bb3a3a65 100644
 --- a/src/search.cpp
 +++ b/src/search.cpp
-@@ -67,6 +67,30 @@ namespace {
+@@ -67,6 +67,39 @@ namespace {
  constexpr int SEARCHEDLIST_CAPACITY = 32;
  using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
  
@@ -13,9 +13,18 @@ index 2def21d0..63e54ff3 100644
 +static constexpr int    OCC_MAX_SLOTS            = 256;
 +static uint64_t         occCounts[OCC_MAX_SLOTS] = {};
 +static std::atomic<int> occSlotIdx{0};
-+static thread_local int myOccSlot = -1;
++static std::atomic<int> occGeneration{0};
++static thread_local int myOccSlot       = -1;
++static thread_local int myOccGeneration = -1;
 +
 +void flush_occ_count(const CorrectionHistory<Continuation>& hist) {
++    // Re-acquire slot if generation changed (reset after a previous bench run).
++    int gen = occGeneration.load(std::memory_order_relaxed);
++    if (myOccGeneration != gen)
++    {
++        myOccSlot       = -1;
++        myOccGeneration = gen;
++    }
 +    if (myOccSlot < 0)
 +        myOccSlot = occSlotIdx.fetch_add(1, std::memory_order_relaxed);
 +    if (myOccSlot >= OCC_MAX_SLOTS)
@@ -33,7 +42,7 @@ index 2def21d0..63e54ff3 100644
  // (*Scalers):
  // The values with Scaler asterisks have proven non-linear scaling.
  // They are optimized to time controls of 180 + 1.8 and longer,
-@@ -152,6 +176,47 @@ bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
+@@ -152,6 +185,48 @@ bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
  
  }  // namespace
  
@@ -71,17 +80,18 @@ index 2def21d0..63e54ff3 100644
 +        std::cout << "," << occCounts[s];
 +    std::cout << std::endl;
 +
-+    // Reset for next bench run
++    // Reset for next bench run. Increment generation so all threads re-acquire
++    // a fresh slot instead of reusing stale myOccSlot values.
 +    for (int s = 0; s < nSlots; ++s)
 +        occCounts[s] = 0;
-+    myOccSlot = -1;
 +    occSlotIdx.store(0, std::memory_order_relaxed);
++    occGeneration.fetch_add(1, std::memory_order_relaxed);
 +}
 +
  Search::Worker::Worker(SharedState&                    sharedState,
                         std::unique_ptr<ISearchManager> sm,
                         size_t                          threadId,
-@@ -188,6 +253,7 @@ void Search::Worker::start_searching() {
+@@ -188,6 +263,7 @@ void Search::Worker::start_searching() {
      if (!is_mainthread())
      {
          iterative_deepening();
@@ -89,7 +99,7 @@ index 2def21d0..63e54ff3 100644
          return;
      }
  
-@@ -205,6 +271,7 @@ void Search::Worker::start_searching() {
+@@ -205,6 +281,7 @@ void Search::Worker::start_searching() {
      {
          threads.start_searching();  // start non-main threads
          iterative_deepening();      // main thread start searching
