@@ -157,6 +157,66 @@ for correction tables is 6-15% for the four correction tables and 8-17% for
 the two continuation correction tables. At higher depths (20+), zero-delta
 rates increase significantly as tables saturate.
 
+## ContinuationCorrectionHistory Occupancy
+
+A separate instrumentation (`instrument-contcorr-occupancy.patch`) measures
+how many entries of the per-worker `continuationCorrectionHistory` table are
+non-zero after a bench run.  The table is a 4D array indexed by
+`[outer_piece][outer_to][inner_piece][inner_to]` (16x64x16x64 = 1,048,576
+entries per worker).  Occupancy answers: at a given depth and thread count,
+what fraction of these entries have been written at least once?
+
+### Building the Occupancy Instrumented Binary
+
+Apply `instrument-contcorr-occupancy.patch` to any Stockfish branch:
+
+```bash
+cd /path/to/Stockfish
+git apply /path/to/instrument-contcorr-occupancy.patch
+cd src
+make -j profile-build ARCH=x86-64-avxvnni COMP=mingw   # Windows/MSYS2
+```
+
+### Running the Occupancy Sweep
+
+```bash
+# Depths 1-12, default thread counts [1, 4, 8, 10, 12, 14, 16, 18]
+python run_contcorr_occupancy.py --exe ./stockfish --to 12
+
+# Custom threads, save summary and CSV
+python run_contcorr_occupancy.py --exe ./stockfish --to 18 \
+    --threads 1 4 8 16 -o results.txt --csv raw.csv
+```
+
+### Occupancy Output Format
+
+Summary table (stdout):
+
+```text
+Depth |      1T |      4T |      8T |    10T |    12T |    14T |    16T |    18T |   RowTime
+---------------------------------------------------------------------------------------------
+    1 |   0.12% |   0.12% |   0.13% |  0.13% |  0.14% |  0.14% |  0.14% |  0.15% |     50.1s
+```
+
+Raw CSV (--csv):
+
+```csv
+depth,nthreads,total_entries,sum_occupied,occupancy_pct,elapsed_s,t0_occupied,...
+1,1,1048576,1234,0.12,5.2,1234
+```
+
+Each `occ,` line in the binary's stdout contains per-thread occupied counts.
+
+### Shared Module
+
+Common subprocess execution logic is in `shared/bench_runner.py`.  Both
+`run_delta_sweep.py` and `run_contcorr_occupancy.py` can import from it:
+
+```python
+from shared.bench_runner import run_bench
+lines, timed_out = run_bench("./stockfish", depth=10, threads=8)
+```
+
 ## License
 
 GPL-3.0, same as Stockfish.
