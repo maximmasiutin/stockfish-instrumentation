@@ -34,7 +34,7 @@ class UCIEngine:
         threads: int = 1,
         hash_mb: int = 256,
     ) -> None:
-        self.proc = subprocess.Popen(
+        self.proc = subprocess.Popen(  # pylint: disable=consider-using-with
             [exe],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -92,7 +92,7 @@ class UCIEngine:
                 for line in remaining.splitlines():
                     self._collected.append(line)
             self.proc.wait(timeout=timeout_s)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
             self._force_kill()
         finally:
             timer.cancel()

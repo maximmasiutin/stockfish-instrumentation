@@ -40,7 +40,11 @@ from pathlib import Path
 
 # Allow running from any directory or as a module
 sys.path.insert(0, str(Path(__file__).parent))
-from shared.bench_runner import DEFAULT_EXE, DEFAULT_TIMEOUT_S, run_bench  # pylint: disable=wrong-import-position
+from shared.bench_runner import (  # pylint: disable=wrong-import-position
+    DEFAULT_EXE,
+    DEFAULT_TIMEOUT_S,
+    run_bench,
+)
 from shared.uci_engine import UCIEngine  # pylint: disable=wrong-import-position
 
 DEFAULT_THREAD_COUNTS = [1, 2, 4, 8, 10, 12, 14, 16, 18]
@@ -90,9 +94,7 @@ def parse_overlap_line(line: str) -> OverlapRow | None:
         return None
 
 
-def load_book_positions(
-    book_path: str, n: int, seed: int | None
-) -> list[str]:
+def load_book_positions(book_path: str, n: int, seed: int | None) -> list[str]:
     """Load n random FEN positions from an EPD file."""
     lines: list[str] = []
     with open(book_path, encoding="utf-8", errors="replace") as f:
@@ -146,7 +148,10 @@ def run_book_overlap(  # pylint: disable=too-many-arguments,too-many-positional-
     engine = UCIEngine(exe, threads=threads)
     for fen in positions:
         engine.go_depth(fen, depth)
-        print(f"  d={depth} t={threads} pos {positions.index(fen) + 1}/{len(positions)}", flush=True)
+        print(
+            f"  d={depth} t={threads} pos {positions.index(fen) + 1}/{len(positions)}",
+            flush=True,
+        )
     collected = engine.quit(timeout_s=timeout_s)
     results: list[OverlapRow] = []
     for line in collected:
@@ -174,7 +179,9 @@ def _build_csv_fieldnames() -> list[str]:
     return base + pops
 
 
-def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+def main() -> (
+    None
+):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Entry point: parse arguments, run sweep, display and save results."""
     parser = argparse.ArgumentParser(
         description="Sweep contCorrHist thread overlap by depth and thread count",
@@ -224,7 +231,10 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
         help="Positions to sample from book (default: 30)",
     )
     parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for book sampling (default: 42)"
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for book sampling (default: 42)",
     )
     parser.add_argument(
         "--timeout",
@@ -282,7 +292,9 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
             newline="",
             encoding="utf-8",
         )
-        csvw = csv.DictWriter(csvf, fieldnames=_build_csv_fieldnames(), extrasaction="ignore")
+        csvw = csv.DictWriter(
+            csvf, fieldnames=_build_csv_fieldnames(), extrasaction="ignore"
+        )
         csvw.writeheader()
         csvf.flush()
 
@@ -317,9 +329,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-branches,too-man
                         args.exe, depth, threads, positions, args.timeout
                     )
                 else:
-                    results = run_bench_overlap(
-                        args.exe, depth, threads, args.timeout
-                    )
+                    results = run_bench_overlap(args.exe, depth, threads, args.timeout)
 
                 elapsed = time.time() - t0
 
