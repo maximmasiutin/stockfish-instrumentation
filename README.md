@@ -157,16 +157,20 @@ for correction tables is 6-15% for the four correction tables and 8-17% for
 the two continuation correction tables. At higher depths (20+), zero-delta
 rates increase significantly as tables saturate.
 
-## ContinuationCorrectionHistory Occupancy
+## ContinuationCorrectionHistory Thread Overlap
 
 A separate instrumentation (`instrument-contcorr-occupancy.patch`) measures
-how many entries of the per-worker `continuationCorrectionHistory` table are
-non-zero after a bench run.  The table is a 4D array indexed by
-`[outer_piece][outer_to][inner_piece][inner_to]` (16x64x16x64 = 1,048,576
-entries per worker).  Occupancy answers: at a given depth and thread count,
-what fraction of these entries have been written at least once?
+per-entry thread overlap in the `continuationCorrectionHistory` table.
+For each of the 1,048,576 entries (16x64x16x64), a bitmask records which
+threads wrote to that entry.  At the end of the run, the popcount distribution
+shows how many entries were written by 1 thread, 2 threads, ..., N threads.
 
-### Building the Occupancy Instrumented Binary
+This data answers the key question for contCorrHist sharing:
+what fraction of entries are contested by multiple threads?
+
+The instrumentation tracks ss-2 and ss-4 writes separately (per-ply breakdown).
+
+### Building the Overlap Instrumented Binary
 
 Apply `instrument-contcorr-occupancy.patch` to any Stockfish branch:
 
@@ -177,45 +181,59 @@ cd src
 make -j profile-build ARCH=x86-64-avxvnni COMP=mingw   # Windows/MSYS2
 ```
 
-### Running the Occupancy Sweep
+The patch modifies `src/search.cpp`, `src/search.h`, and `src/uci.cpp`.
+
+### Running the Overlap Sweep
+
+Two modes: bench (built-in positions) and book (EPD file with diverse openings).
 
 ```bash
-# Depths 1-12, default thread counts [1, 4, 8, 10, 12, 14, 16, 18]
-python run_contcorr_occupancy.py --exe ./stockfish --to 12
+# Bench mode: depth 16-22, default threads [1, 2, 4, 8, 10, 12, 14, 16, 18]
+python run_contcorr_occupancy.py --exe ./stockfish --from 16 --to 22
 
-# Custom threads, save summary and CSV
-python run_contcorr_occupancy.py --exe ./stockfish --to 18 \
-    --threads 1 4 8 16 -o results.txt --csv raw.csv
+# Book mode: positions from EPD file at fixed depth
+python run_contcorr_occupancy.py --exe ./stockfish --book positions.epd \
+    --depth 20 -n 30 --threads 1 2 4 8
+
+# Save summary and raw CSV
+python run_contcorr_occupancy.py --exe ./stockfish --depth 16 \
+    --threads 1 2 4 8 -o results.txt --csv raw.csv
 ```
 
-### Occupancy Output Format
+### Overlap Output Format
 
-Summary table (stdout):
+Summary table (stdout): rows = depth, columns = thread counts,
+cell = overlap % (fraction of written entries hit by >= 2 threads, for ss-2).
 
 ```text
-Depth |      1T |      4T |      8T |    10T |    12T |    14T |    16T |    18T |   RowTime
----------------------------------------------------------------------------------------------
-    1 |   0.12% |   0.12% |   0.13% |  0.13% |  0.14% |  0.14% |  0.14% |  0.15% |     50.1s
+Depth |      1T |      2T |      4T |      8T |     Time
+---------------------------------------------------------
+    8 |   0.0% |  41.8% |  54.1% |  72.3% |     1.6s
+   16 |   0.0% |  38.5% |  61.2% |  78.9% |    42.0s
 ```
 
 Raw CSV (--csv):
 
 ```csv
-depth,nthreads,total_entries,sum_occupied,occupancy_pct,elapsed_s,t0_occupied,...
-1,1,1048576,1234,0.12,5.2,1234
+depth,nthreads,ply,total_entries,written,written_pct,overlapped,overlap_pct,mean_pop,elapsed_s,pop0,pop1,...,pop32
+8,2,2,1048576,4960,0.473,2074,41.81,1.418,0.5,1043616,2886,2074,0,...
+8,2,4,1048576,3728,0.3555,1404,37.66,1.377,0.5,1044848,2324,1404,0,...
 ```
 
-Each `occ,` line in the binary's stdout contains per-thread occupied counts.
+Key columns: `written_pct` = occupancy, `overlap_pct` = contested fraction,
+`mean_pop` = average thread count among written entries.
 
-### Shared Module
+### Shared Modules
 
-Common subprocess execution logic is in `shared/bench_runner.py`.  Both
-`run_delta_sweep.py` and `run_contcorr_occupancy.py` can import from it:
+Common logic is in `shared/`:
 
 ```python
-from shared.bench_runner import run_bench
-lines, timed_out = run_bench("./stockfish", depth=10, threads=8)
+from shared.bench_runner import run_bench     # bench-mode subprocess
+from shared.uci_engine import UCIEngine       # UCI-mode engine manager
 ```
+
+`UCIEngine` manages a long-running Stockfish process via UCI protocol,
+supporting `go_depth()` and `go_movetime()` for book-based testing.
 
 ## License
 
