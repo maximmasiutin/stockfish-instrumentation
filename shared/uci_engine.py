@@ -63,7 +63,9 @@ class UCIEngine:
         while True:
             line = self._stdout.readline()
             if not line:
-                break
+                raise RuntimeError(
+                    f"Engine EOF before '{token}' (collected {len(self._collected)} lines)"
+                )
             line = line.rstrip("\n")
             self._collected.append(line)
             if line.startswith(token):

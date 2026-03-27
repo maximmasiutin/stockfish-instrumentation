@@ -134,6 +134,12 @@ def run_bench_overlap(
             # Skip empty reports (all pop0 = total, from quit hook)
             if int(parsed.get("written", 0)) > 0:
                 results.append(parsed)
+    if not results:
+        print(
+            f"  Warning: bench completed but no overlap data (d={depth} t={threads})",
+            file=sys.stderr,
+            flush=True,
+        )
     return results
 
 
@@ -146,12 +152,9 @@ def run_book_overlap(  # pylint: disable=too-many-arguments,too-many-positional-
 ) -> list[OverlapRow]:
     """Run UCI with book positions and parse overlap lines."""
     engine = UCIEngine(exe, threads=threads)
-    for fen in positions:
+    for idx, fen in enumerate(positions):
         engine.go_depth(fen, depth)
-        print(
-            f"  d={depth} t={threads} pos {positions.index(fen) + 1}/{len(positions)}",
-            flush=True,
-        )
+        print(f"  d={depth} t={threads} pos {idx + 1}/{len(positions)}", flush=True)
     collected = engine.quit(timeout_s=timeout_s)
     results: list[OverlapRow] = []
     for line in collected:
