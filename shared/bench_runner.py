@@ -64,8 +64,8 @@ def run_bench(  # pylint: disable=too-many-arguments,too-many-positional-argumen
     timed_out_event = threading.Event()
 
     def _kill_on_timeout() -> None:
-        timed_out_event.set()
         if proc.poll() is None:
+            timed_out_event.set()
             proc.kill()
 
     timer = threading.Timer(timeout_s, _kill_on_timeout)
