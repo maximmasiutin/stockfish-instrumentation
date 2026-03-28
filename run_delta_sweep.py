@@ -24,7 +24,7 @@ import time
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shared.bench_runner import DEFAULT_EXE, run_bench
+from shared.bench_runner import DEFAULT_EXE, DEFAULT_TIMEOUT_S, run_bench
 
 TABLES = ["pawnCorr", "minorCorr", "nonpawnW", "nonpawnB", "contCorr2", "contCorr4"]
 BIN_NAMES = [
@@ -94,18 +94,16 @@ def _parse_pretty_line(line: str, depth: int) -> tuple[str, int, float, RawRow] 
 
 
 def run_depth(  # pylint: disable=too-many-locals
-    exe: str, depth: int, threads: int = 8
-) -> tuple[D0Dict, int, list[RawRow]]:
-    """Run bench at given depth, return per-table raw rows and d0 summary."""
-    lines, rc = run_bench(exe, depth, threads, hash_mb=256)
+    exe: str, depth: int, threads: int = 8, timeout_s: int = DEFAULT_TIMEOUT_S
+) -> tuple[D0Dict, int, list[RawRow], bool]:
+    """Run bench at given depth, return per-table raw rows, d0 summary, and timeout flag."""
+    lines, timed_out = run_bench(exe, depth, threads, hash_mb=256, timeout_s=timeout_s)
 
-    if rc == -1:
-        print("TIMEOUT after 7200s", file=sys.stderr, flush=True)
-        return {}, 0, []
-
-    if rc != 0:
-        print(f"bench failed (exit {rc})", file=sys.stderr, flush=True)
-        return {}, 0, []
+    if timed_out:
+        print(
+            f"TIMEOUT after {timeout_s}s at depth {depth}", file=sys.stderr, flush=True
+        )
+        return {}, 0, [], True
 
     d0: D0Dict = {}
     total_writes = 0
@@ -131,7 +129,7 @@ def run_depth(  # pylint: disable=too-many-locals
             total_writes += tw_val
             raw_rows.append(row)
 
-    return d0, total_writes, raw_rows
+    return d0, total_writes, raw_rows, False
 
 
 def fmt_row(
@@ -181,6 +179,12 @@ def main() -> None:  # pylint: disable=too-many-locals
         default=None,
         help="Save full raw delta distribution to CSV file",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT_S,
+        help=f"Per-depth timeout in seconds; stop sweep on timeout (default: {DEFAULT_TIMEOUT_S})",
+    )
     args = parser.parse_args()
 
     header = (
@@ -226,9 +230,15 @@ def main() -> None:  # pylint: disable=too-many-locals
 
         for depth in range(args.from_depth, args.to + 1):
             t0 = time.time()
-            d0, total_writes, raw_rows = run_depth(args.exe, depth, args.threads)
+            d0, total_writes, raw_rows, did_timeout = run_depth(
+                args.exe, depth, args.threads, timeout_s=args.timeout
+            )
             elapsed = time.time() - t0
             print(f"\n--- depth {depth} ... done in {elapsed:.1f}s", flush=True)
+
+            if did_timeout:
+                emit(f"{depth:>5} | TIMEOUT after {args.timeout}s -- stopping sweep")
+                break
 
             if not d0:
                 row = f"{depth:>5} | {'(no data)':^80}"
