@@ -1,6 +1,6 @@
 # External Tools Scan Log
 
-## 2026-03-28 -- Security scan of S:/q/stockfish-instrumentation
+## 2026-03-28 -- Security scan of stockfish-instrumentation
 
 ### bandit 1.9.2
 - Start: 2026-03-28 16:58:06 UTC
