@@ -19,11 +19,12 @@ import argparse
 import csv
 import os
 import re
-import subprocess
 import sys
-import threading
 import time
 from typing import Any
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shared.bench_runner import DEFAULT_EXE, run_bench
 
 TABLES = ["pawnCorr", "minorCorr", "nonpawnW", "nonpawnB", "contCorr2", "contCorr4"]
 BIN_NAMES = [
@@ -39,7 +40,6 @@ BIN_NAMES = [
     "d100_199",
     "d200p",
 ]
-DEFAULT_EXE = "stockfish.exe" if sys.platform == "win32" else "./stockfish"
 
 RawRow = dict[str, Any]
 D0Dict = dict[str, float]
@@ -97,46 +97,14 @@ def run_depth(  # pylint: disable=too-many-locals
     exe: str, depth: int, threads: int = 8
 ) -> tuple[D0Dict, int, list[RawRow]]:
     """Run bench at given depth, return per-table raw rows and d0 summary."""
-    cmd = [exe, "bench", "256", str(threads), str(depth)]
-    env = os.environ.copy()
-    env["BENCH_DEPTH"] = str(depth)
-    proc = subprocess.Popen(  # pylint: disable=consider-using-with
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env
-    )
+    lines, rc = run_bench(exe, depth, threads, hash_mb=256)
 
-    timed_out = threading.Event()
-
-    def _kill_on_timeout() -> None:
-        timed_out.set()
-        if proc.poll() is None:
-            proc.kill()
-
-    timer = threading.Timer(7200, _kill_on_timeout)
-    timer.start()
-
-    lines: list[str] = []
-    bestmove_count = 0
-    try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            lines.append(line)
-            if line.startswith("bestmove"):
-                bestmove_count += 1
-                print(f"--- depth {depth} ... pos {bestmove_count}/51", flush=True)
-        proc.wait()
-    finally:
-        timer.cancel()
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
-
-    if timed_out.is_set():
+    if rc == -1:
         print("TIMEOUT after 7200s", file=sys.stderr, flush=True)
         return {}, 0, []
 
-    if proc.returncode != 0:
-        print(f"bench failed (exit {proc.returncode})", file=sys.stderr, flush=True)
+    if rc != 0:
+        print(f"bench failed (exit {rc})", file=sys.stderr, flush=True)
         return {}, 0, []
 
     d0: D0Dict = {}
