@@ -28,7 +28,8 @@ import time
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shared.bench_runner import DEFAULT_EXE, pick_random_fen, run_bench
+from shared.bench_runner import DEFAULT_EXE, pick_random_fen, run_bench  # noqa: E402
+from shared.path_utils import validated_output_path  # noqa: E402
 
 MAX_POP: int = 32
 PLY_LABELS: list[int] = [2, 4]
@@ -164,12 +165,14 @@ def main() -> None:
     sep = "-" * len(header)
 
     outf = (
-        open(args.output, "w", newline="\n", encoding="utf-8") if args.output else None
+        open(validated_output_path(args.output), "w", newline="\n", encoding="utf-8")
+        if args.output
+        else None
     )
     csvf = None
     csvw: csv.DictWriter[str] | None = None
     if args.csv:
-        csvf = open(args.csv, "w", newline="", encoding="utf-8")
+        csvf = open(validated_output_path(args.csv), "w", newline="", encoding="utf-8")
         fieldnames = ["depth", "ply", "total_entries", "elapsed_s"] + [
             f"pop{k}" for k in range(MAX_POP + 1)
         ]
