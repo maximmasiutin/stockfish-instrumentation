@@ -11,9 +11,13 @@ Usage:
     python aggregate_nmp_perpos.py scratchpad/nmp-v2-perpos-d26.csv --summary
 """
 
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shared.path_utils import validated_input_path  # noqa: E402
 
 BIN_COLS = [
     "lt-512",
@@ -64,7 +68,7 @@ def main() -> None:
     csv_path = sys.argv[1]
     show_summary = "--summary" in sys.argv
 
-    lines = Path(csv_path).read_text(encoding="utf-8").splitlines()
+    lines = validated_input_path(csv_path).read_text(encoding="utf-8").splitlines()
     header = lines[0].split(",")
 
     depth_totals: dict[int, dict[str, int]] = defaultdict(

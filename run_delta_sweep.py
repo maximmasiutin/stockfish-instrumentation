@@ -24,7 +24,8 @@ import time
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shared.bench_runner import DEFAULT_EXE, DEFAULT_TIMEOUT_S, run_bench
+from shared.bench_runner import DEFAULT_EXE, DEFAULT_TIMEOUT_S, run_bench  # noqa: E402
+from shared.path_utils import validated_output_path  # noqa: E402
 
 TABLES = ["pawnCorr", "minorCorr", "nonpawnW", "nonpawnB", "contCorr2", "contCorr4"]
 BIN_NAMES = [
@@ -196,7 +197,7 @@ def main() -> None:  # pylint: disable=too-many-locals
 
     outf = (
         open(  # noqa: SIM115  # pylint: disable=consider-using-with
-            args.output,
+            validated_output_path(args.output),
             "w",
             newline="\n",
             encoding="utf-8",

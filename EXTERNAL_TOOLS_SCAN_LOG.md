@@ -42,3 +42,9 @@
   - run_nmp_perpos.py line 75: arg into open() (write)
   - run_occupancy_sweep.py line 167: arg into open() (write)
 - Output: scratchpad/snyk-results.txt
+
+### bandit 1.9.2 (post-fix verification)
+- Start: 2026-03-28 21:20 UTC
+- Status: COMPLETED
+- Findings: 0 Medium/High. 6 Low (B311 random x2, B404 subprocess x2, B603 subprocess x2) -- all acceptable for local CLI tools
+- Fix applied: created shared/path_utils.py with validated_input_path/validated_output_path; all 6 Snyk MEDIUM Path Traversal findings resolved

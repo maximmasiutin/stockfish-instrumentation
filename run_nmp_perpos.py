@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from shared.bench_runner import run_bench
+from shared.path_utils import validated_input_path, validated_output_path
 
 
 def run_single_position(
@@ -60,9 +61,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    epd_path = validated_input_path(args.epd_file)
     fens = [
         line.strip()
-        for line in Path(args.epd_file).read_text(encoding="utf-8").splitlines()
+        for line in epd_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     print(
@@ -72,7 +74,8 @@ def main() -> None:
     )
 
     header_written = False
-    with open(args.output_csv, "w", encoding="utf-8") as out:
+    out_path = validated_output_path(args.output_csv)
+    with open(out_path, "w", encoding="utf-8") as out:
         for idx, fen in enumerate(fens):
             print(
                 f"  Position {idx + 1}/{len(fens)}: {fen[:60]}...",

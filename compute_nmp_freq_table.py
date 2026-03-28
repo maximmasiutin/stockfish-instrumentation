@@ -8,8 +8,12 @@ Usage:
     python compute_nmp_freq_table.py scratchpad/nmp-v2-1t-d20.csv
 """
 
+import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shared.path_utils import validated_input_path  # noqa: E402
 
 
 # Column names for bins (32cp each from <-512 to >=544)
@@ -78,7 +82,7 @@ def main() -> None:
         print("Usage: python compute_nmp_freq_table.py <csv>", file=sys.stderr)
         sys.exit(1)
 
-    lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+    lines = validated_input_path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 
     # Parse header and data
     header_line = lines[0]
