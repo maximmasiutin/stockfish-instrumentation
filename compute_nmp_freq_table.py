@@ -100,18 +100,18 @@ def main() -> None:
     print(
         f"{'Depth':>5s} {'Entered':>8s} "
         f"{'cv>128':>7s} {'cv>192':>7s} {'cv>256':>7s} {'cv>288':>7s} "
-        f"{'cv>320':>7s} {'cv>384':>7s} "
-        f"{'cv<-192':>7s} {'cv<-288':>7s} "
+        f"{'cv>320':>7s} {'cv>384':>7s} {'cv>416':>7s} {'cv>448':>7s} "
+        f"{'cv<-192':>7s} {'cv<-288':>7s} {'cv<-320':>7s} {'cv<-416':>7s} {'cv<-448':>7s} "
         f"{'Impr%':>6s}"
     )
     print(
         f"{'':>5s} {'':>8s} "
         f"{'%':>7s} {'%':>7s} {'%':>7s} {'%':>7s} "
-        f"{'%':>7s} {'%':>7s} "
-        f"{'%':>7s} {'%':>7s} "
+        f"{'%':>7s} {'%':>7s} {'%':>7s} {'%':>7s} "
+        f"{'%':>7s} {'%':>7s} {'%':>7s} {'%':>7s} {'%':>7s} "
         f"{'':>6s}"
     )
-    print("-" * 100)
+    print("-" * 150)
 
     for row in rows:
         depth = int(row["depth"])
@@ -125,9 +125,14 @@ def main() -> None:
         cv288 = cumulative_tail(row, "cp288")
         cv320 = cumulative_tail(row, "cp320")
         cv384 = cumulative_tail(row, "cp384")
+        cv416 = cumulative_tail(row, "cp416")
+        cv448 = cumulative_tail(row, "cp448")
 
         neg192 = neg_cumulative_tail(row, "cp-192")
         neg288 = neg_cumulative_tail(row, "cp-288")
+        neg320 = neg_cumulative_tail(row, "cp-320")
+        neg416 = neg_cumulative_tail(row, "cp-416")
+        neg448 = neg_cumulative_tail(row, "cp-448")
 
         impr_pct = row.get("impr_pct", "0")
 
@@ -136,7 +141,10 @@ def main() -> None:
             f"{100*cv128/entered:>7.2f} {100*cv192/entered:>7.2f} "
             f"{100*cv256/entered:>7.2f} {100*cv288/entered:>7.2f} "
             f"{100*cv320/entered:>7.2f} {100*cv384/entered:>7.2f} "
+            f"{100*cv416/entered:>7.2f} {100*cv448/entered:>7.2f} "
             f"{100*neg192/entered:>7.2f} {100*neg288/entered:>7.2f} "
+            f"{100*neg320/entered:>7.2f} {100*neg416/entered:>7.2f} "
+            f"{100*neg448/entered:>7.2f} "
             f"{float(impr_pct):>6.1f}"
         )
 
@@ -173,6 +181,55 @@ def main() -> None:
         band1 = cv192 - cv256  # [192, 256)
         band2 = cv256 - cv288  # [256, 288)
         band3 = cv288  # >= 288
+
+        r1 = (1 * depth) // 16
+        r2 = (2 * depth) // 16
+        r3 = (3 * depth) // 16
+
+        rate1 = 100 * band1 / entered if entered else 0
+        rate2 = 100 * band2 / entered if entered else 0
+        rate3 = 100 * band3 / entered if entered else 0
+
+        eff_r = (rate1 * r1 + rate2 * r2 + rate3 * r3) / 100
+
+        print(
+            f"{depth:>5d} {r1:>8d} {r2:>8d} {r3:>8d} "
+            f"{rate1:>8.2f} {rate2:>8.2f} {rate3:>8.2f} "
+            f"{eff_r:>7.3f}"
+        )
+
+
+    # Second R-adjustment table for 192/320/448 thresholds
+    print()
+    print("R-adjustment table: ((cv>192)+(cv>320)+(cv>448)) * depth / 16")
+    print("=" * 90)
+    print(
+        f"{'Depth':>5s} {'steps=1':>8s} {'steps=2':>8s} {'steps=3':>8s} "
+        f"{'s1 rate':>8s} {'s2 rate':>8s} {'s3 rate':>8s} "
+        f"{'Eff R':>7s}"
+    )
+    print(
+        f"{'':>5s} {'[192,320)':>8s} {'[320,448)':>8s} {'>=448':>8s} "
+        f"{'%':>8s} {'%':>8s} {'%':>8s} "
+        f"{'':>7s}"
+    )
+    print("-" * 90)
+
+    for row in rows:
+        if row["depth"] == "depth":
+            continue
+        depth = int(row["depth"])
+        entered = int(row["entered"])
+        if entered == 0 or depth > 32:
+            continue
+
+        cv192 = cumulative_tail(row, "cp192")
+        cv320 = cumulative_tail(row, "cp320")
+        cv448 = cumulative_tail(row, "cp448")
+
+        band1 = cv192 - cv320  # [192, 320)
+        band2 = cv320 - cv448  # [320, 448)
+        band3 = cv448  # >= 448
 
         r1 = (1 * depth) // 16
         r2 = (2 * depth) // 16
