@@ -12,7 +12,7 @@ Example:
 
     lines, timed_out = run_bench("./stockfish", depth=10, threads=8)
     for line in lines:
-        if line.startswith("occ,"):
+        if line.startswith("overlap,"):
             print(line)
 """
 
