@@ -185,6 +185,8 @@ The patch modifies `src/search.cpp`, `src/search.h`, and `src/uci.cpp`.
 
 ### Running the Overlap Sweep
 
+Two modes: bench (built-in positions) and book (EPD file with diverse openings).
+
 ```bash
 # Bench mode: depth 16-22, default threads [1, 2, 4, 8, 10, 12, 14, 16, 18]
 python run_occupancy_sweep.py --exe ./stockfish --from 16 --to 22
@@ -198,13 +200,40 @@ python run_occupancy_sweep.py --exe ./stockfish --depth 16 \
     --threads 1 2 4 8 -o results.txt --csv raw.csv
 ```
 
+### Overlap Output Format
+
+Summary table (stdout): rows = depth, columns = thread counts,
+cell = overlap % (fraction of written entries hit by >= 2 threads, for ss-2).
+
+```text
+Depth |      1T |      2T |      4T |      8T |     Time
+---------------------------------------------------------
+    8 |   0.0% |  41.8% |  54.1% |  72.3% |     1.6s
+   16 |   0.0% |  38.5% |  61.2% |  78.9% |    42.0s
+```
+
+Raw CSV (--csv):
+
+```csv
+depth,nthreads,ply,total_entries,written,written_pct,overlapped,overlap_pct,mean_pop,elapsed_s,pop0,pop1,...,pop32
+8,2,2,1048576,4960,0.473,2074,41.81,1.418,0.5,1043616,2886,2074,0,...
+8,2,4,1048576,3728,0.3555,1404,37.66,1.377,0.5,1044848,2324,1404,0,...
+```
+
+Key columns: `written_pct` = occupancy, `overlap_pct` = contested fraction,
+`mean_pop` = average thread count among written entries.
+
 ### Shared Modules
 
 Common logic is in `shared/`:
 
 ```python
 from shared.bench_runner import run_bench     # bench-mode subprocess
+from shared.uci_engine import UCIEngine       # UCI-mode engine manager
 ```
+
+`UCIEngine` manages a long-running Stockfish process via UCI protocol,
+supporting `go_depth()` and `go_movetime()` for book-based testing.
 
 ## NMP Correction Value Instrumentation
 
